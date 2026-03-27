@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { apiClient } from "./api/client";
 
 // ── Load Fonts ──────────────────────────────────────────────────────────────
 (() => {
