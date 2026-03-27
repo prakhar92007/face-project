@@ -2634,35 +2634,14 @@ export default function App() {
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [modelsLoading, setModelsLoading] = useState(false);
 
-  const [adminCreds, setAdminCreds] = useState(null);
-  const [students, setStudents] = useState([]);
-  const [subjects, setSubjects] = useState([]);
-  const [attendance, setAttendance] = useState([]);
-  const [notifs, setNotifs] = useState([]);
+  const [adminCreds, setAdminCreds] = useState(() => ls.g("ac", null));
+  const [students, setStudents] = useState(() => ls.g("students", []));
+  const [subjects, setSubjects] = useState(() => ls.g("subjects", []));
+  const [attendance, setAttendance] = useState(() => ls.g("attendance", []));
+  const [notifs, setNotifs] = useState(() => ls.g("notifs", []));
 
   const [user, setUser] = useState(null);
   const [toast, setToast] = useState(null);
-
-  // ── Load data from API ──
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [admins, stds, subs, att] = await Promise.all([
-          apiClient.getAdmin(),
-          apiClient.getStudents(),
-          apiClient.getSubjects(),
-          apiClient.getAttendance(),
-        ]);
-        if (admins.data) setAdminCreds(admins.data);
-        if (stds.data) setStudents(stds.data);
-        if (subs.data) setSubjects(subs.data);
-        if (att.data) setAttendance(att.data);
-      } catch (err) {
-        console.error("Failed to load data from server:", err);
-      }
-    };
-    loadData();
-  }, []);
 
   // Inject global styles
   useEffect(() => {
@@ -2707,7 +2686,11 @@ export default function App() {
   };
 
   // Persist
-  // localStorage is replaced with API calls - data is persisted on server
+  useEffect(() => ls.s("students", students), [students]);
+  useEffect(() => ls.s("subjects", subjects), [subjects]);
+  useEffect(() => ls.s("attendance", attendance), [attendance]);
+  useEffect(() => ls.s("notifs", notifs), [notifs]);
+  useEffect(() => { if (adminCreds) ls.s("ac", adminCreds); }, [adminCreds]);
 
   const showToast = useCallback((msg, type = "info") => {
     setToast({ msg, type, id: uid() });
@@ -2715,93 +2698,53 @@ export default function App() {
   }, []);
 
   // ── Data ops ──
-  const addStudent = async (data) => {
-    const s = { ...data, createdAt: new Date().toISOString() };
-    try {
-      const res = await apiClient.addStudent(s);
-      setStudents((p) => [...p, res.data]);
-      showToast(`Student "${res.data.name}" registered`, "success");
-      return res.data;
-    } catch (err) {
-      showToast("Error adding student", "error");
-      console.error(err);
-    }
+  const addStudent = (data) => {
+    const s = { ...data, id: uid(), createdAt: new Date().toISOString() };
+    setStudents((p) => [...p, s]);
+    showToast(`Student "${s.name}" registered`, "success");
+    return s;
   };
-  
-  const updateStudent = async (id, data) => {
-    try {
-      const res = await apiClient.updateStudent(id, data);
-      setStudents((p) => p.map((s) => (s.id === id ? res.data : s)));
-      showToast("Student updated", "success");
-    } catch (err) {
-      showToast("Error updating student", "error");
-      console.error(err);
-    }
-  };
-  
-  const deleteStudent = async (id) => {
-    try {
-      await apiClient.deleteStudent(id);
-      setStudents((p) => p.filter((s) => s.id !== id));
-      setAttendance((p) => p.filter((a) => a.studentId !== id));
-      showToast("Student removed", "info");
-    } catch (err) {
-      showToast("Error deleting student", "error");
-      console.error(err);
-    }
+  const updateStudent = (id, data) =>
+    setStudents((p) => p.map((s) => (s.id === id ? { ...s, ...data } : s)));
+  const deleteStudent = (id) => {
+    setStudents((p) => p.filter((s) => s.id !== id));
+    setAttendance((p) => p.filter((a) => a.studentId !== id));
+    showToast("Student removed", "info");
   };
 
-  const addSubject = async (data) => {
-    try {
-      const res = await apiClient.addSubject(data);
-      setSubjects((p) => [...p, res.data]);
-      showToast(`Subject "${res.data.name}" created`, "success");
-    } catch (err) {
-      showToast("Error adding subject", "error");
-      console.error(err);
-    }
+  const addSubject = (data) => {
+    const s = { ...data, id: uid() };
+    setSubjects((p) => [...p, s]);
+    showToast(`Subject "${s.name}" created`, "success");
   };
-  
-  const deleteSubject = async (id) => {
-    try {
-      await apiClient.deleteSubject(id);
-      setSubjects((p) => p.filter((s) => s.id !== id));
-      showToast("Subject removed", "info");
-    } catch (err) {
-      showToast("Error deleting subject", "error");
-      console.error(err);
-    }
+  const deleteSubject = (id) => {
+    setSubjects((p) => p.filter((s) => s.id !== id));
+    showToast("Subject removed", "info");
   };
 
-  const markAttendance = async (studentId, subjectId) => {
+  const markAttendance = (studentId, subjectId) => {
     const student = students.find((s) => s.id === studentId);
     const subject = subjects.find((s) => s.id === subjectId);
     if (!student || !subject) return null;
     const rec = {
+      id: uid(),
       studentId,
       subjectId,
       timestamp: new Date().toISOString(),
       date: todayStr(),
     };
-    try {
-      const res = await apiClient.markAttendance(rec);
-      setAttendance((p) => [...p, res.data]);
-      const notif = {
-        id: uid(),
-        studentId,
-        parentEmail: student.parentEmail,
-        parentPhone: student.parentPhone,
-        message: `${student.name}'s attendance marked for ${subject.name} at ${fmtTime(rec.timestamp)}`,
-        timestamp: rec.timestamp,
-        type: "live",
-      };
-      setNotifs((p) => [notif, ...p]);
-      showToast(`✓ ${student.name} marked`, "success");
-      return res.data;
-    } catch (err) {
-      showToast("Error marking attendance", "error");
-      console.error(err);
-    }
+    setAttendance((p) => [...p, rec]);
+    const notif = {
+      id: uid(),
+      studentId,
+      parentEmail: student.parentEmail,
+      parentPhone: student.parentPhone,
+      message: `${student.name}'s attendance marked for ${subject.name} at ${fmtTime(rec.timestamp)}`,
+      timestamp: rec.timestamp,
+      type: "live",
+    };
+    setNotifs((p) => [notif, ...p]);
+    return rec;
   };
 
   const sendMonthlyReport = async () => {
@@ -2834,15 +2777,10 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: C.bg }}>
       <Toast toast={toast} />
       {!adminCreds ? (
-        <SetupPage onSetup={async (c) => {
-          try {
-            const res = await apiClient.setAdmin(c);
-            setAdminCreds(res.data);
-            showToast("Admin account created successfully!", "success");
-          } catch (err) {
-            showToast("Error creating admin account", "error");
-            console.error(err);
-          }
+        <SetupPage onSetup={(c) => {
+          setAdminCreds(c);
+          ls.s("ac", c);
+          showToast("Admin account created successfully!", "success");
         }} showToast={showToast} />
       ) : !user ? (
         <LoginPage adminCreds={adminCreds} students={students} onLogin={setUser} showToast={showToast} />
