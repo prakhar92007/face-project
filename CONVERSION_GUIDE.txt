@@ -1,0 +1,71 @@
+// CONVERSION GUIDE: localStorage → API Calls
+// 
+// Step-by-step changes needed in App.jsx:
+
+// 1. ADD AT TOP (after imports):
+// import { apiClient } from "./api/client";
+
+// 2. UPDATE useState INITIALIZATION from:
+// const [adminCreds, setAdminCreds] = useState(() => ls.g("ac", null));
+// 
+// TO:
+// const [adminCreds, setAdminCreds] = useState(null);
+// useEffect(() => {
+//   apiClient.getAdmin().then(res => setAdminCreds(res.data));
+// }, []);
+
+// 3. REMOVE all ls.s() persist calls and replace with API calls:
+// BEFORE:
+// useEffect(() => ls.s("students", students), [students]);
+//
+// AFTER:
+// useEffect(() => {
+//   if (students.length > 0) {
+//     // Optional: sync with backend if needed
+//   }
+// }, [students]);
+
+// 4. REPLACE DATA OPERATIONS:
+
+// OLD:
+// const addStudent = (data) => {
+//   const s = { ...data, id: uid(), createdAt: new Date().toISOString() };
+//   setStudents((p) => [...p, s]);
+//   showToast(`Student "${s.name}" registered`, "success");
+//   return s;
+// };
+
+// NEW:
+// const addStudent = async (data) => {
+//   const s = { ...data, createdAt: new Date().toISOString() };
+//   try {
+//     const res = await apiClient.addStudent(s);
+//     setStudents((p) => [...p, res.data]);
+//     showToast(`Student "${res.data.name}" registered`, "success");
+//     return res.data;
+//   } catch (err) {
+//     showToast("Error adding student", "error");
+//   }
+// };
+
+// 5. INITIAL DATA LOAD:
+// Add after faceApi setup useEffect:
+// useEffect(() => {
+//   const loadData = async () => {
+//     try {
+//       const [admins, stds, subs, att] = await Promise.all([
+//         apiClient.getAdmin(),
+//         apiClient.getStudents(),
+//         apiClient.getSubjects(),
+//         apiClient.getAttendance(),
+//       ]);
+//       setAdminCreds(admins.data);
+//       setStudents(stds.data);
+//       setSubjects(subs.data);
+//       setAttendance(att.data);
+//     } catch (err) {
+//       showToast("Failed to load data from server", "error");
+//     }
+//   };
+//   loadData();
+// }, []);
